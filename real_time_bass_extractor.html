@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Bass Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* カスタムスクロールバーなどの微調整 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; 
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex flex-col font-sans">
+
+    <!-- ヘッダー -->
+    <header class="bg-gray-800 shadow-md p-4 flex justify-between items-center border-b border-gray-700">
+        <h1 class="text-2xl font-bold text-blue-400 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+            </svg>
+            Real-time Bass Extractor
+        </h1>
+        <span class="text-sm text-gray-400">Powered by Web Audio API</span>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="flex-grow p-6 flex flex-col md:flex-row gap-6 max-w-6xl mx-auto w-full">
+        
+        <!-- コントロールパネル -->
+        <section class="bg-gray-800 p-6 rounded-xl shadow-lg md:w-1/3 flex flex-col gap-6 border border-gray-700">
+            <div>
+                <h2 class="text-lg font-semibold mb-2 border-b border-gray-700 pb-2">1. 接続設定</h2>
+                <p class="text-sm text-gray-400 mb-4">
+                    別のタブで音楽を再生し、下のボタンを押して**「タブ」**を選択し、**「タブの音声を共有する」**にチェックを入れてください。
+                </p>
+                <button id="startBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-4 rounded transition duration-200 flex justify-center items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                    </svg>
+                    キャプチャを開始
+                </button>
+                <button id="stopBtn" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded transition duration-200 hidden mt-2">
+                    停止する
+                </button>
+            </div>
+
+            <div id="controlsArea" class="opacity-50 pointer-events-none transition-opacity duration-300">
+                <h2 class="text-lg font-semibold mb-4 border-b border-gray-700 pb-2">2. フィルター設定</h2>
+                
+                <!-- フィルター周波数 -->
+                <div class="mb-6">
+                    <label class="flex justify-between text-sm font-medium text-gray-300 mb-1">
+                        <span>カットオフ周波数 (低音の抽出範囲)</span>
+                        <span id="freqValue" class="text-blue-400 font-mono">150 Hz</span>
+                    </label>
+                    <input type="range" id="freqSlider" min="20" max="1000" value="150" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                    <p class="text-xs text-gray-500 mt-1">数値を下げるほど深いベースのみになります。</p>
+                </div>
+
+                <!-- フィルターの鋭さ (Q) -->
+                <div class="mb-6">
+                    <label class="flex justify-between text-sm font-medium text-gray-300 mb-1">
+                        <span>レゾナンス (Q値)</span>
+                        <span id="qValue" class="text-blue-400 font-mono">1.0</span>
+                    </label>
+                    <input type="range" id="qSlider" min="0.1" max="20" step="0.1" value="1.0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                    <p class="text-xs text-gray-500 mt-1">境界の音を強調させます。</p>
+                </div>
+
+                <!-- 原音ミックス (Dry) -->
+                <div class="mb-6">
+                    <label class="flex justify-between text-sm font-medium text-gray-300 mb-1">
+                        <span>原音ミックス (Dry)</span>
+                        <span id="dryGainValue" class="text-blue-400 font-mono">20 %</span>
+                    </label>
+                    <input type="range" id="dryGainSlider" min="0" max="2" step="0.1" value="0.2" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                    <p class="text-xs text-gray-500 mt-1">元の音楽を重ねて再生します。</p>
+                </div>
+
+                <!-- ボリューム -->
+                <div>
+                    <label class="flex justify-between text-sm font-medium text-gray-300 mb-1">
+                        <span>ベース音ボリューム (Wet)</span>
+                        <span id="gainValue" class="text-blue-400 font-mono">200 %</span>
+                    </label>
+                    <input type="range" id="gainSlider" min="0" max="5" step="0.1" value="2.0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                    <p class="text-xs text-gray-500 mt-1">抽出したベース音の大きさを調整します。</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ビジュアライザー -->
+        <section class="bg-gray-800 p-6 rounded-xl shadow-lg md:w-2/3 flex flex-col border border-gray-700 relative overflow-hidden">
+            <h2 class="text-lg font-semibold mb-4 border-b border-gray-700 pb-2 z-10 relative">オシロスコープ (抽出された波形)</h2>
+            <div class="flex-grow w-full bg-gray-950 rounded-lg relative flex items-center justify-center">
+                <!-- 未接続時のメッセージ -->
+                <div id="statusMessage" class="absolute text-gray-500 flex flex-col items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                    <span>キャプチャを開始すると波形が表示されます</span>
+                </div>
+                <canvas id="visualizer" class="absolute top-0 left-0 w-full h-full rounded-lg"></canvas>
+            </div>
+        </section>
+    </main>
+
+    <!-- エラー表示用モーダル背景 (初期非表示) -->
+    <div id="errorModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-gray-800 p-6 rounded-xl max-w-md w-full border border-red-500 shadow-2xl transform scale-95 transition-transform duration-300" id="errorModalContent">
+            <h3 class="text-xl font-bold text-red-500 mb-2 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                エラーが発生しました
+            </h3>
+            <p id="errorMessage" class="text-gray-300 mb-6"></p>
+            <div class="flex justify-end">
+                <button id="closeErrorBtn" class="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded transition">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Web Audio API のグローバル変数 ---
+        let audioCtx;
+        let mediaStream;
+        let sourceNode;
+        let filterNode;
+        let gainNode;
+        let dryGainNode; // 追加: 原音用ゲインノード
+        let analyserNode;
+        let animationId;
+
+        // --- DOM要素の取得 ---
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const controlsArea = document.getElementById('controlsArea');
+        const statusMessage = document.getElementById('statusMessage');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+        
+        // スライダー
+        const freqSlider = document.getElementById('freqSlider');
+        const freqValue = document.getElementById('freqValue');
+        const qSlider = document.getElementById('qSlider');
+        const qValue = document.getElementById('qValue');
+        const dryGainSlider = document.getElementById('dryGainSlider'); // 追加
+        const dryGainValue = document.getElementById('dryGainValue'); // 追加
+        const gainSlider = document.getElementById('gainSlider');
+        const gainValue = document.getElementById('gainValue');
+
+        // エラーモーダル
+        const errorModal = document.getElementById('errorModal');
+        const errorModalContent = document.getElementById('errorModalContent');
+        const errorMessage = document.getElementById('errorMessage');
+        const closeErrorBtn = document.getElementById('closeErrorBtn');
+
+        // キャンバスのリサイズ処理
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); // 初期化
+
+        // --- エラー表示処理 ---
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorModal.classList.remove('hidden');
+            // 少し遅延させてアニメーション発火
+            setTimeout(() => {
+                errorModal.classList.remove('opacity-0');
+                errorModalContent.classList.remove('scale-95');
+            }, 10);
+        }
+
+        closeErrorBtn.addEventListener('click', () => {
+            errorModal.classList.add('opacity-0');
+            errorModalContent.classList.add('scale-95');
+            setTimeout(() => {
+                errorModal.classList.add('hidden');
+            }, 300);
+        });
+
+        // --- キャプチャ開始処理 ---
+        startBtn.addEventListener('click', async () => {
+            try {
+                // 1. 画面/タブのストリームを取得
+                // video: true がないと、多くのブラウザで「タブ共有」ダイアログが出ないため必須
+                mediaStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true, 
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+
+                // 音声トラックが存在するか確認
+                const audioTracks = mediaStream.getAudioTracks();
+                if (audioTracks.length === 0) {
+                    stopCapture();
+                    throw new Error('音声が取得できませんでした。共有ダイアログで「タブの音声を共有する」にチェックが入っているか確認してください。');
+                }
+
+                // 2. AudioContextの初期化
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // 3. ノードの作成
+                sourceNode = audioCtx.createMediaStreamSource(mediaStream);
+                
+                // ローパスフィルター (指定周波数より上をカット)
+                filterNode = audioCtx.createBiquadFilter();
+                filterNode.type = 'lowpass';
+                filterNode.frequency.value = parseFloat(freqSlider.value);
+                filterNode.Q.value = parseFloat(qSlider.value);
+
+                // ベース音ゲイン (Wet)
+                gainNode = audioCtx.createGain();
+                gainNode.gain.value = parseFloat(gainSlider.value);
+
+                // 原音ゲイン (Dry)
+                dryGainNode = audioCtx.createGain();
+                dryGainNode.gain.value = parseFloat(dryGainSlider.value);
+
+                // アナライザー (波形取得用・ここで音がミックスされます)
+                analyserNode = audioCtx.createAnalyser();
+                analyserNode.fftSize = 2048; // 分解能
+                
+                // 4. ノードの接続
+                // ベース音経路: Source -> Filter -> Gain(Wet) -> Analyser
+                sourceNode.connect(filterNode);
+                filterNode.connect(gainNode);
+                gainNode.connect(analyserNode);
+
+                // 原音経路: Source -> Gain(Dry) -> Analyser
+                sourceNode.connect(dryGainNode);
+                dryGainNode.connect(analyserNode);
+
+                // 最終出力
+                analyserNode.connect(audioCtx.destination);
+
+                // ストリームがユーザーによって停止されたときのイベント
+                mediaStream.getVideoTracks()[0].addEventListener('ended', stopCapture);
+
+                // 5. UIの更新
+                startBtn.classList.add('hidden');
+                stopBtn.classList.remove('hidden');
+                controlsArea.classList.remove('opacity-50', 'pointer-events-none');
+                statusMessage.classList.add('hidden');
+
+                // 描画ループ開始
+                drawVisualizer();
+
+            } catch (err) {
+                console.error('Error accessing display media.', err);
+                if (err.name !== 'NotAllowedError') { // ユーザーキャンセル以外のエラー
+                    showError(err.message || 'キャプチャの開始に失敗しました。対応しているブラウザ(Chrome, Edge等)を使用してください。');
+                }
+            }
+        });
+
+        // --- キャプチャ停止処理 ---
+        function stopCapture() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (audioCtx) {
+                audioCtx.close();
+            }
+            cancelAnimationFrame(animationId);
+
+            // UIの初期化
+            startBtn.classList.remove('hidden');
+            stopBtn.classList.add('hidden');
+            controlsArea.classList.add('opacity-50', 'pointer-events-none');
+            statusMessage.classList.remove('hidden');
+            
+            // キャンバスをクリア
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        stopBtn.addEventListener('click', stopCapture);
+
+        // --- スライダーのイベントリスナー ---
+        freqSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            freqValue.textContent = `${val} Hz`;
+            if (filterNode) {
+                // スムーズな値の変更
+                filterNode.frequency.setTargetAtTime(val, audioCtx.currentTime, 0.05);
+            }
+        });
+
+        qSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            qValue.textContent = val;
+            if (filterNode) {
+                filterNode.Q.setTargetAtTime(val, audioCtx.currentTime, 0.05);
+            }
+        });
+
+        // 原音用スライダーのイベントリスナー追加
+        dryGainSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            dryGainValue.textContent = `${Math.round(val * 100)} %`;
+            if (dryGainNode) {
+                dryGainNode.gain.setTargetAtTime(val, audioCtx.currentTime, 0.05);
+            }
+        });
+
+        gainSlider.addEventListener('input', (e) => {
+            const val = e.target.value;
+            gainValue.textContent = `${Math.round(val * 100)} %`;
+            if (gainNode) {
+                gainNode.gain.setTargetAtTime(val, audioCtx.currentTime, 0.05);
+            }
+        });
+
+        // --- ビジュアライザー描画処理 ---
+        function drawVisualizer() {
+            animationId = requestAnimationFrame(drawVisualizer);
+
+            const bufferLength = analyserNode.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyserNode.getByteTimeDomainData(dataArray);
+
+            canvasCtx.fillStyle = 'rgb(3, 7, 18)'; // bg-gray-950相当
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = 'rgb(96, 165, 250)'; // text-blue-400相当
+
+            canvasCtx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if (i === 0) {
+                    canvasCtx.moveTo(x, y);
+                } else {
+                    canvasCtx.lineTo(x, y);
+                }
+
+                x += sliceWidth;
+            }
+
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            canvasCtx.stroke();
+        }
+    </script>
+</body>
+</html>
