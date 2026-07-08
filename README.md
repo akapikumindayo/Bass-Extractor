@@ -1,6 +1,9 @@
 # Bass-Extractor(ベースライン切り取り機)
 ブラウザで流れている音楽から低音域（ベースライン）をリアルタイムに強調して聴くことができるツールです。楽器の練習や耳コピに役立ちます（その他含め）。
 
+使用はこちらから
+https://github.com/akapikumindayo/Bass-Extractor.git
+
 仕組み・クレジット:
 ・Web Audio API を使用した、ブラウザ上で完結する安全な設計です。
 ・Geminiと協力して開発しました。
